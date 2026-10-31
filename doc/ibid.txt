@@ -1,0 +1,174 @@
+*ibid.txt*  Cite from Zotero and keep each document's .bib in sync
+
+==============================================================================
+CONTENTS                                                        *ibid*
+
+  1. Introduction ........................... |ibid-intro|
+  2. Commands ............................... |ibid-commands|
+  3. Citing ................................. |ibid-cite|
+  4. Syncing the .bib ....................... |ibid-sync|
+  5. Diagnostics, hover, completion ......... |ibid-integrations|
+  6. Configuration .......................... |ibid-config|
+  7. Highlights and events .................. |ibid-highlights|
+
+==============================================================================
+1. INTRODUCTION                                                 *ibid-intro*
+
+ibid.nvim cites items from your Zotero library in LaTeX, pandoc Markdown
+(markdown, quarto, rmd) and Typst, and keeps the document's bibliography
+file equal to the Zotero entries it cites.
+
+It reads the library from a copy of `zotero.sqlite`, so citing, completion
+and hover work with Zotero closed. Writing new `.bib` entries goes through
+Better BibTeX's exporter, which needs Zotero running. Nothing ever writes to
+Zotero's own files.
+
+Requirements: Neovim >= 0.10, Zotero 7+ with Better BibTeX, `sqlite3` and
+`curl`. Optional: telescope.nvim, nvim-cmp, hover.nvim. Run
+|:checkhealth| `ibid` to verify them.
+
+`setup()` installs the autocmds (diagnostics, sync on save); the |:Ibid|
+command exists without it.
+
+==============================================================================
+2. COMMANDS                                                     *ibid-commands*
+
+                                                                *:Ibid*
+:Ibid [cite]            Pick items and insert a citation at the cursor.
+:Ibid cayw              Cite through Better BibTeX's picker (the Zotero
+                        window comes to the front).
+:Ibid sync              Write the cited entries to the managed .bib.
+:Ibid sync!             Same, re-exporting every entry, and taking over a
+                        declared .bib that isn't managed yet.
+:Ibid info              Card for the item under the cursor (else a picker).
+                        In the card: `o` open PDF, `gx` DOI/URL, `gz` show in
+                        Zotero, `q` close.
+:Ibid pdf               Open the item's PDF attachment (|ibid-open_pdf|).
+:Ibid zotero            Select the item in Zotero (`zotero://select`).
+:Ibid url               Open the DOI, else the URL.
+:Ibid key               Yank the citation key.
+:Ibid bibtex            Yank its BibTeX/BibLaTeX entry.
+:Ibid reference         Yank a formatted reference (|ibid-style|).
+:Ibid reload            Re-read the library now.
+
+Lua: `require("ibid")` has `cite({ keys? })`, `cayw()`, `sync({ force,
+adopt })`, `info()`, `open_pdf()`, `show_in_zotero()`, `open_url()`,
+`yank_key()`, `yank_bibtex()`, `yank_reference()`, `reload()`,
+`cmp_source()` and `item(key)`.
+
+==============================================================================
+3. CITING                                                       *ibid-cite*
+
+The picker lists every item that has a citation key, most recently added
+first, and matches on key, authors, year, title, container and tags. In
+Telescope, <Tab> marks several items and <CR> cites all of them.
+
+The text depends on where the cursor is:
+
+  plain text            the filetype's |ibid-formats| (`\cite{a,b}`,
+                        `[@a; @b]`, `@a @b`)
+  inside \cite{x,       just the keys, with a comma when needed
+  right after @         the key without its @ (pandoc, Typst)
+  inside [@x, p. 3      `; @a` (pandoc)
+
+In normal mode the citation goes after the cursor, like |a|. From insert
+mode it goes at the cursor, and insert mode resumes after it.
+
+Picker keys (|ibid-keys|): <C-y> yank key, <C-b> yank BibTeX, <C-r> yank
+formatted reference, <C-o> open PDF, <C-z> show in Zotero.
+
+==============================================================================
+4. SYNCING THE .BIB                                             *ibid-sync*
+
+The managed file is the bibliography the document declares:
+
+  LaTeX     `\addbibresource{x.bib}` (BibLaTeX entries) or `\bibliography{x}`
+            (BibTeX entries), read from VimTeX's main file if available
+  pandoc    `bibliography:` in the YAML front matter, else in _quarto.yml
+  Typst     `#bibliography("x.bib")` or `#bibliography(("a.bib", "b.bib"))`
+  else      |ibid-bib.fallback|, then `b:ibid_bib`
+
+When several are declared, the first one that is managed, missing or empty
+is used; the others are treated as hand-written. Their keys are never
+pulled from Zotero, and they're never touched.
+
+The file starts with a `%` header line that marks it as managed, followed by
+the entries sorted by key. A sync:
+- collects the cited keys (with VimTeX, from every file of the project)
+- keeps entries already in the file unless Zotero modified the item after
+  the file was written, so Zotero only has to be running when a key is
+  cited for the first time
+- exports the rest through Better BibTeX
+- drops entries no longer cited (|ibid-bib.prune|)
+- writes only when the content changes, so build watchers stay quiet
+
+A declared .bib that exists and isn't managed is never overwritten; `:Ibid
+sync!` takes it over. Once a document has a managed .bib, every |:w| syncs
+it (|ibid-bib.sync_on_save|).
+
+==============================================================================
+5. DIAGNOSTICS, HOVER, COMPLETION                       *ibid-integrations*
+
+Diagnostics ~
+Cited keys that are neither in Zotero nor in one of the document's
+hand-written .bib files get a warning (source `ibid`). LaTeX buffers are
+always checked. pandoc and Typst buffers are only checked when they declare
+a bibliography, so a README's @mentions aren't flagged. Typst `@ref`s to
+labels defined in the same buffer and Quarto cross-references (`@fig-x`,
+`@tbl-x`, …) are not citations.
+
+Hover ~
+The hover.nvim provider `ibid.hover` (priority 1001) shows the item card
+when the cursor is on a known key, and is disabled everywhere else: >lua
+    require("hover").config({ providers = { "ibid.hover", ... } })
+<
+Completion ~
+The nvim-cmp source completes keys inside `\cite{…}`, after `@` and inside
+`#cite(<…>)`. Author and title words are part of the filter text: >lua
+    cmp.register_source("ibid", require("ibid").cmp_source())
+    -- and { name = "ibid" } in cmp.setup({ sources = … })
+<
+==============================================================================
+6. CONFIGURATION                                                *ibid-config*
+
+Pass a table to `require("ibid").setup()`; unset keys keep their defaults.
+
+*ibid-data_dir*         Zotero data directory. nil: the profile's
+                        `extensions.zotero.dataDir`, else ~/Zotero.
+*ibid-port*             Zotero's HTTP port (23119).
+*ibid-timeout*          ms before a request to Zotero is given up (8000).
+*ibid-filetypes*        Where citing, completion, diagnostics and hover
+                        apply.
+*ibid-formats*          Per filetype: `{ "\\cite{%s}", sep = ",",
+                        key = "%s" }`, where `%s` is the keys joined by
+                        `sep` and `key` wraps each key. Or a function(keys,
+                        ft) returning the whole string.
+*ibid-bib.translator*   Better BibTeX translator when the document doesn't
+                        imply one ("Better BibLaTeX").
+*ibid-bib.sync_on_save* Sync a managed .bib on |:w| (true).
+*ibid-bib.prune*        Drop entries no longer cited (true).
+*ibid-bib.fallback*     function(bufnr) -> path for documents that declare
+                        no bibliography.
+*ibid-diagnostics*      Warn on unknown keys (true).
+*ibid-style*            CSL style id for formatted references (APA).
+*ibid-open_pdf*         function(path, item) to open attachments; nil uses
+                        |vim.ui.open()|.
+*ibid-keys*             Picker keys; set one to false to disable it.
+*ibid-hl-overrides*     Highlight overrides, `{ IbidKey = { link = … } }`.
+
+==============================================================================
+7. HIGHLIGHTS AND EVENTS                                     *ibid-highlights*
+
+All groups are `default` links, so colorschemes and |:highlight| win:
+
+  IbidAuthor    Identifier      picker: authors
+  IbidYear      Number          picker: year
+  IbidTitle     Normal          picker: title
+  IbidKey       Constant
+  IbidMuted     Comment
+  IbidAccent    Function
+
+                                                    *IbidLibraryChanged*
+`User IbidLibraryChanged` fires after the library is re-read from Zotero.
+
+ vim:tw=78:ts=8:ft=help:norl:
