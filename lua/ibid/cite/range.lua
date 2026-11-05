@@ -34,7 +34,35 @@ function M.at(buf, row, col)
     else chars[i] = c end
   end
   local outside = table.concat(chars)
-  local candidates = {}
+  local candidates, rejected = {}, {}
+  local function metadata(fragment, keys)
+    if syntax == 'tex' then
+      local command, between = fragment:match('^\\(%a+%*?)%s*(.-)%s*{[^{}]*}$')
+      if not command then return nil end
+      local locator
+      if between ~= '' then
+        locator = between:match('^%[([^%[%]]*)%]$')
+        if not locator then return nil end -- e.g. prenote + postnote
+      end
+      return {command=command,locator=locator}
+    elseif syntax == 'pandoc' and fragment:sub(1,1) == '[' then
+      local segments, locator = vim.split(fragment:sub(2,-2), ';', {plain=true}), nil
+      if #segments ~= #keys then return nil end
+      for index, segment in ipairs(segments) do
+        local key, tail = segment:match('^%s*@([%w_][%w_:%.#%$%%&%-%+%?<>~/]*)%s*(.-)%s*$')
+        if key ~= keys[index] then return nil end
+        if tail ~= '' then
+          if index ~= #segments then return nil end
+          locator = tail:match('^,%s*(.+)$')
+          if not locator then return nil end
+        end
+      end
+      return {locator=locator}
+    elseif syntax == 'typst' and fragment:sub(1,1) == '@' then
+      return {locator=fragment:match('^@[%w_][%w_:%.%-]*%[(.*)%]$')}
+    end
+    return {}
+  end
   local function add(s, e)
     if s <= offset and offset <= e then
       local genuine = false
@@ -48,9 +76,11 @@ function M.at(buf, row, col)
       local keys = {}
       for _, item in ipairs(found) do keys[#keys + 1] = item.key end
       if #keys > 0 then
+        local meta = metadata(fragment, keys)
+        if not meta then rejected[#rejected+1]={s,e}; return end
         local sr, sc = position(raw, s)
         local er, ec = position(raw, e + 1)
-        candidates[#candidates + 1] = { row = sr, col = sc, end_row = er, end_col = ec, keys = keys, text = fragment }
+        candidates[#candidates + 1] = { row = sr, col = sc, end_row = er, end_col = ec, keys = keys, text = fragment, command = meta.command, locator = meta.locator }
       end
     end
   end
@@ -83,6 +113,11 @@ function M.at(buf, row, col)
     end
   end
   table.sort(candidates, function(a, b) return #a.text > #b.text end)
-  return candidates[1]
+  for _, candidate in ipairs(candidates) do
+    local start = byte_offset(candidate.row, candidate.col)
+    local blocked = false
+    for _, span in ipairs(rejected) do if start >= span[1] and start <= span[2] then blocked = true end end
+    if not blocked then return candidate end
+  end
 end
 return M

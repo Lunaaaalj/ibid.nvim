@@ -10,31 +10,64 @@ local function label(it)
   return ("%s (%s)  %s"):format(it.authors ~= "" and it.authors or "—", it.year ~= "" and it.year or "n.d.", it.title) .. (it.library_name and ("  [" .. it.library_name .. "]") or "")
 end
 
+local function ordered(items, preselected)
+  local by_key, result = {}, {}
+  for _, item in ipairs(items) do by_key[item.key] = item end
+  for _, key in ipairs(preselected or {}) do
+    if by_key[key] then result[#result + 1], by_key[key] = by_key[key], nil end
+  end
+  for _, item in ipairs(items) do if by_key[item.key] then result[#result + 1], by_key[item.key] = item, nil end end
+  return result
+end
 local function fallback(items, opts)
+  local cycle = opts.cite_ft and require("ibid.cite.scan").syntax(opts.cite_ft) == "tex" and { cycle = true }
+  local function cycle_label()
+    return "Cycle LaTeX command (" .. (require("ibid.cite.insert").command(opts.cite_ft) or "custom") .. ")"
+  end
   if opts.preselected and #opts.preselected > 0 then
-    local selected = {}
-    for _, key in ipairs(opts.preselected) do selected[key] = true end
+    local selected, selection_order, known = {}, {}, {}
+    for _, key in ipairs(opts.preselected) do
+      selected[key], known[key] = true, true
+      selection_order[#selection_order+1] = key
+    end
     local done = { done = true }
     local choices = { done }
+    if cycle then choices[#choices + 1] = cycle end
     for _, item in ipairs(items) do choices[#choices + 1] = item end
     local function show()
       vim.ui.select(choices, { prompt = opts.prompt .. " (toggle items, then Done)", format_item = function(it)
         if it.done then return "Done — confirm selected citations" end
+        if it.cycle then return cycle_label() end
         return (selected[it.key] and "[x] " or "[ ] ") .. label(it)
       end }, function(it)
         if not it then return end
         if it.done then
           local result = {}
           for _, item in ipairs(items) do if selected[item.key] then result[#result + 1] = item end end
-          if #result > 0 then opts.on_select(result) end
-        else selected[it.key] = not selected[it.key]; show() end
+          if #result > 0 then opts.on_select(ordered(result, selection_order)) end
+        elseif it.cycle then require("ibid.cite.insert").cycle_command(opts.cite_ft); show()
+        else
+          selected[it.key] = not selected[it.key]
+          if selected[it.key] and not known[it.key] then
+            known[it.key] = true; selection_order[#selection_order+1] = it.key
+          end
+          show()
+        end
       end)
     end
     return show()
   end
-  vim.ui.select(items, { prompt = opts.prompt, format_item = label }, function(it)
-    if it then opts.on_select({ it }) end
-  end)
+  local choices = {}
+  if cycle then choices[#choices + 1] = cycle end
+  vim.list_extend(choices, items)
+  local function show()
+    vim.ui.select(choices, { prompt = opts.prompt, format_item = function(it) return it.cycle and cycle_label() or label(it) end }, function(it)
+      if not it then return end
+      if it.cycle then require("ibid.cite.insert").cycle_command(opts.cite_ft); show()
+      else opts.on_select({ it }) end
+    end)
+  end
+  show()
 end
 
 local function telescope(items, opts)
@@ -68,7 +101,7 @@ local function telescope(items, opts)
       local e = state.get_selected_entry()
       if e then out = { e.value } end
     end
-    return out
+    return ordered(out, opts.preselected)
   end
 
   local picker

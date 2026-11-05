@@ -18,7 +18,8 @@ function M.capture()
   local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
   if not insert and #line > 0 then col = col + 1 + vim.str_utf_end(line, col + 1) end
   return { win = win, buf = buf, row = row - 1, col = math.min(col, #line), cursor_col = vim.api.nvim_win_get_cursor(win)[2], insert = insert,
-    tick = vim.api.nvim_buf_get_changedtick(buf) }
+    tick = vim.api.nvim_buf_get_changedtick(buf),
+    command_at_capture = M.command and M.command(vim.bo[buf].filetype) }
 end
 
 local command_index = {}
@@ -139,7 +140,14 @@ end
 -- Shared browser/picker path. Cancelling an optional locator leaves the text alone.
 function M.choose(keys, ctx, opts)
   ctx = ctx or M.capture()
+  if not vim.api.nvim_buf_is_valid(ctx.buf) then return end
   opts = vim.tbl_extend("force", {}, opts or {})
+  if ctx.range then
+    if opts.locator == nil then opts.locator = ctx.range.locator end
+    if opts.command == nil and (not ctx.command_at_capture or ctx.command_at_capture == M.command(vim.bo[ctx.buf].filetype)) then
+      opts.command = ctx.range.command
+    end
+  end
   if opts.locator == nil then opts.locator = (config.options.citation or {}).locator end
   if opts.locator == true then
     vim.ui.input({ prompt = "Citation locator (e.g. p. 12): " }, function(value)

@@ -74,8 +74,8 @@ end)
 
 test('replaces grouped pandoc and complete Typst locator without deleting punctuation', function(insert)
   for _, item in ipairs({
-    {'markdown','é [@a; @b, p. 2].','é [@c].',5},
-    {'typst','é @a[p. 2].','é @c.',5},
+    {'markdown','é [@a; @b, p. 2].','é [@c, p. 2].',5},
+    {'typst','é @a[p. 2].','é @c[p. 2].',5},
     {'markdown','é @a.','é [@c].',4},
     {'typst','#cite( <a> )!','@c!',9},
     {'typst','#cite(label("a"))!','@c!',13},
@@ -197,17 +197,87 @@ test('Telescope marks original keys and cycles commands before confirming select
     package.loaded['telescope.actions.state']={get_current_picker=function() return current end,get_selected_entry=function() return entries[1] end}
     package.loaded['telescope.actions']={select_default={replace=function(_,cb) confirm=cb end},close=function() end}
     package.loaded['telescope.pickers']={new=function(_,opts) return {find=function() opts.attach_mappings(99,function(_,key,cb) mapped[key]=cb end) end} end}
-    require('ibid.cite.picker').pick({cite_ft='tex',preselected={'a','b'},on_select=function(value) result=value end})
+    require('ibid.cite.picker').pick({cite_ft='tex',preselected={'b','a'},on_select=function(value) result=value end})
     completion(current)
     h.eq(2,#selected)
     vim.notify=function() end
     mapped['<C-t>']()
     h.eq('\\parencite{%s}',insert.command('tex'))
     confirm()
-    h.eq({a,b},result)
+    h.eq({b,a},result)
   end,debug.traceback)
   library.get=original_get
   for _,name in ipairs(modules) do package.loaded[name]=saved[name] end
   if not ok then error(err) end
+end)
+test('native picker cycles commands and keeps preselected order on Done', function(insert)
+  local library=require('ibid.library')
+  local original_get, original_select=library.get,vim.ui.select
+  local a={key='a',authors='A',year='2020',title='A'}
+  local b={key='b',authors='B',year='2021',title='B'}
+  local c={key='c',authors='C',year='2022',title='C'}
+  local ok,err=xpcall(function()
+    library.get=function(cb) cb(nil,{items={a,b,c},by_key={a=a,b=b,c=c}}) end
+    local choices,callback,result
+    vim.ui.select=function(items,_,cb) choices,callback=items,cb end
+    require('ibid.cite.picker').pick({cite_ft='tex',on_select=function(value) result=value end})
+    h.eq(true,choices[1].cycle)
+    callback(choices[1])
+    h.eq('\\parencite{%s}',insert.command('tex'))
+    h.eq(nil,result)
+    callback(choices[2]); h.eq({a},result)
+    result=nil
+    require('ibid.cite.picker').pick({cite_ft='tex',preselected={'b','a'},on_select=function(value) result=value end})
+    h.eq(true,choices[2].cycle)
+    callback(choices[2])
+    h.eq('\\textcite{%s}',insert.command('tex'))
+    callback(choices[5]) -- append c after original b,a
+    callback(choices[1])
+    h.eq({b,a,c},result)
+  end,debug.traceback)
+  library.get,vim.ui.select=original_get,original_select
+  if not ok then error(err) end
+end)
+
+test('key-only replacements retain simple command and locator unless overridden',function(insert)
+  for _,item in ipairs({
+    {'tex','Before \\textcite[p. 12]{a} after','Before \\textcite[p. 12]{b} after',25},
+    {'markdown','[@a, p. 12]','[@b, p. 12]',3},
+    {'typst','@a[p12]','@b[p12]',1},
+  }) do
+    document(item[1],{item[2]},function(buf)
+      local col=math.min(item[4],#item[2]-1)
+      vim.api.nvim_win_set_cursor(0,{1,col})
+      local ctx=insert.capture(); ctx.range=require('ibid.cite.range').at(buf,0,col)
+      h.truthy(ctx.range)
+      insert.choose({'b'},ctx)
+      h.eq({item[3]},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end)
+  end
+  document('tex',{'\\textcite[p. 12]{a}'},function(buf)
+    vim.api.nvim_win_set_cursor(0,{1,17})
+    local ctx=insert.capture(); ctx.range=require('ibid.cite.range').at(buf,0,17)
+    insert.choose({'b'},ctx,{command='autocite',locator=false})
+    h.eq({'\\autocite{b}'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+  end)
+end)
+
+test('complex per-key locators and prenotes are refused instead of discarded',function()
+  for _,item in ipairs({
+    {'markdown','[@a, p. 1; @b, p. 2]',3},
+    {'markdown','[see @a, p. 1]',7},
+    {'tex','\\cite[see][p. 1]{a}',18},
+  }) do
+    document(item[1],{item[2]},function(buf) h.eq(nil,require('ibid.cite.range').at(buf,0,item[3])) end)
+  end
+end)
+test('deleted replacement context is harmless before locator or command lookup',function(insert)
+  local buf=vim.api.nvim_create_buf(false,true)
+  local ctx={buf=buf,range={command='textcite',locator='p. 1'}}
+  vim.api.nvim_buf_delete(buf,{force=true})
+  local called=false
+  vim.ui.input=function() called=true end
+  insert.choose({'b'},ctx,{locator=true})
+  h.eq(false,called)
 end)
 return cases
