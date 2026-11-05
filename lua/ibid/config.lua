@@ -40,6 +40,18 @@ M.defaults = {
   diagnostics = true,
   -- library metadata checks (:Ibid lint)
   lint = { max_key_length = 100 },
+  -- literature notes and source-document backlinks
+  notes_dir = nil,
+  note_format = "markdown",
+  backlink_roots = {},
+  citation = {
+    commands = { "cite", "parencite", "textcite", "autocite", "citeauthor" },
+    command_key = "<C-t>",
+    locator = false,
+    completion_limit = 50,
+  },
+  -- opt-in buffer-local insert-mode citation trigger, e.g. "<C-g>c"
+  insert_mapping = false,
   -- CSL style for "yank formatted reference"
   style = "http://www.zotero.org/styles/apa",
   -- function(path, item) opening an attachment; nil = vim.ui.open

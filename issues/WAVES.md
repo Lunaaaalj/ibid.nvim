@@ -61,7 +61,8 @@ Implemented locally on `feat/wave-1-core`: multi-file project discovery with
 incomplete-project sync protection (#8), profile/attachment portability and group
 picker identity (#10), and lint/identity providers plus `:Ibid lint` (#2).
 The integrated suite has 80 passing tests on Neovim 0.11.6 (32 new cases).
-Wave 1 remote CI and native Windows/Linux desktop smoke checks remain pending.
+Wave 1 stable/nightly CI passed on PR #13; native Windows/Linux desktop smoke
+checks remain pending.
 The lint browser tab depends on #1, and Crossref/add actions depend on #3;
 those portions of #2 remain scheduled for later waves. Automatic root discovery
 is bounded and can be overridden with `b:ibid_root`; Quarto chapter syntax is
@@ -85,6 +86,20 @@ Use platform fixtures; distinguish those from real OS smoke tests in reporting.
 Lint must handle incomplete metadata and duplicate identities deterministically.
 
 ## Wave 2 — Build the browser's providers and citation UX
+
+Implemented on `feat/wave-2-integration`, based on wave 1 PR #13. Each worker
+used its own worktree, committed/pushed its changes, and opened a PR: #14 notes
+and backlinks, #15 browser, #16 citation UX. The coordinator reviewed each PR,
+requested follow-up fixes, checked successful CI, and merged them into the
+integration branch. Main is unchanged. Shared commands/configuration/mappings
+and public-flow tests are supplied by the coordinator's integration commit.
+
+The combined suite passes 121 tests on Neovim 0.11.6. A separate smoke check
+against the installed Telescope and real Neovim input loop verified browser
+insert-mode exit/resumption and full citation preselection/confirmation. Worker
+stable/nightly CI passed; combined CI is tracked on the integration PR. Rich
+annotation/note/backlink details in the card/browser remain wave 3 work, so #1
+and the corresponding presentation portion of #5 remain open.
 
 | Worker | Assignment | Owned area |
 | --- | --- | --- |

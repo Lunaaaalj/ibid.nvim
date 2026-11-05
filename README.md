@@ -80,6 +80,39 @@ The outer format is configurable per filetype (`formats`), e.g. `\parencite{%s}`
 
 Picker keys: `<C-y>` yank key · `<C-b>` yank BibTeX · `<C-r>` yank formatted reference (APA by default) · `<C-o>` open PDF · `<C-z>` show in Zotero.
 
+`:Ibid browse` opens the library in a two-pane float. Switch Library,
+Collections, Tags, Recent and Lint with `<Tab>`/`<S-Tab>` or `1`–`5`. Move with
+`j`/`k`, use `<CR>` to enter a collection/tag and `<BS>` to return. `/` filters,
+`i` cites into the previous document, `o` opens a PDF, `gz` selects in Zotero,
+`gx` opens the DOI/URL, and `y`/`Y`/`R` yank the key/BibTeX/reference. `r` reloads,
+`?` shows help, and `q`/`<Esc>` closes. The tab, filter and cursor survive closing.
+
+In the citation picker, `<C-t>` cycles LaTeX commands; the choice is remembered
+per filetype. The native picker offers a command-cycle menu entry.
+`:Ibid replace` selects a replacement for the citation under the
+cursor. Enable `insert_mapping = "<C-g>c"` for a buffer-local insert-mode trigger,
+and `citation.locator = true` to prompt for a page/locator after selecting items.
+Cancelling the prompt leaves the document unchanged. Lua callers can also use
+`require("ibid").cite({ locator = "p. 12", command = "parencite" })`.
+Replacement preserves existing simple commands and locators unless overridden;
+complex multicites and per-key locator forms are refused.
+
+## Literature notes and backlinks
+
+Set `notes_dir` and run `:Ibid note` for the cited item under the cursor (or one
+chosen from the picker). Notes contain metadata, the abstract, and annotations
+grouped by colour with page references. Re-running appends unseen annotation IDs
+and preserves existing writing. A loaded note buffer keeps its unsaved changes;
+save it normally. `note_format = "typst"` creates `.typ` notes instead of Markdown.
+Citation keys are encoded when necessary to keep filenames within `notes_dir`.
+
+`:Ibid backlinks` lists actual citations in loaded documents and configured
+`backlink_roots`. Searching roots requires `rg`; matches are checked by the
+citation scanner. PDF hooks can receive a third options argument with `page` and
+`attachment_zkey`; existing two-argument hooks remain compatible. Child-note and
+annotation providers are available for the richer card/browser view planned in
+the next wave.
+
 ## Syncing the `.bib`
 
 The target is the bibliography the document declares:
@@ -122,6 +155,9 @@ a chapter's own front matter bibliography keeps its scope local.
 | `:Ibid key` · `bibtex` · `reference` | yank the key · its BibTeX entry · a formatted reference |
 | `:Ibid reload` | re-read the library |
 | `:Ibid lint` | list metadata findings; `<CR>` selects the item in Zotero |
+| `:Ibid browse` | open the library browser |
+| `:Ibid replace` | replace the citation under the cursor |
+| `:Ibid note` · `backlinks` | open a literature note · find citing documents |
 
 ## Configuration
 
@@ -152,8 +188,16 @@ require("ibid").setup({
   },
   diagnostics = true,
   lint = { max_key_length = 100 },
+  notes_dir = nil,         -- set a directory to enable literature notes
+  note_format = "markdown", -- or "typst"
+  backlink_roots = {},     -- directories searched by ripgrep
+  insert_mapping = false,  -- e.g. "<C-g>c"
+  citation = {
+    commands = { "cite", "parencite", "textcite", "autocite", "citeauthor" },
+    command_key = "<C-t>", locator = false, completion_limit = 50,
+  },
   style = "http://www.zotero.org/styles/apa",
-  open_pdf = nil,          -- function(path, item); nil = vim.ui.open
+  open_pdf = nil,          -- function(path, item, opts); nil = vim.ui.open
   keys = { yank_key = "<C-y>", yank_bibtex = "<C-b>", yank_reference = "<C-r>",
            open_pdf = "<C-o>", show_in_zotero = "<C-z>" },
 })

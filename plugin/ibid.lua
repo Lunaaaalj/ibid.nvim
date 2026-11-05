@@ -11,6 +11,7 @@ vim.g.loaded_ibid = true
 
 local subs = {
   cite = function(ibid) ibid.cite() end,
+  replace = function(ibid) ibid.cite({ replace = true }) end,
   cayw = function(ibid) ibid.cayw() end,
   sync = function(ibid, bang) ibid.sync({ force = bang, adopt = bang }) end,
   info = function(ibid) ibid.info() end,
@@ -22,6 +23,9 @@ local subs = {
   reference = function(ibid) ibid.yank_reference() end,
   reload = function(ibid) ibid.reload() end,
   lint = function(ibid) ibid.lint() end,
+  browse = function(ibid) ibid.browse() end,
+  note = function(ibid) ibid.note() end,
+  backlinks = function(ibid) ibid.backlinks() end,
 }
 
 vim.api.nvim_create_user_command("Ibid", function(cmd)

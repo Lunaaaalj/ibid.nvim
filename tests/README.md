@@ -20,6 +20,12 @@ GitHub Actions runs the suite against Neovim stable and nightly. Local results
 only establish compatibility with the locally installed version; inspect remote
 CI results before closing issue #11.
 
+Wave 2 adds annotation/cache migration, append-only notes, backlink candidate
+filtering, browser window lifecycle, citation replacement, and public-command
+integration cases. Optional external tools and Telescope are stubbed in the
+automated suite. Interactive smoke checks against installed Telescope and real
+insert-mode transitions are recorded separately in the integration PR.
+
 ## Timestamp behavior
 
 An ordinary sync with unchanged entries preserves the bibliography's contents

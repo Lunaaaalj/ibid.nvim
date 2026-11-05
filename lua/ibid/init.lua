@@ -7,15 +7,53 @@
 local config = require("ibid.config")
 
 local M = {}
+local insert_mappings = {}
 
 local function notify(msg, level) vim.notify("ibid: " .. msg, level or vim.log.levels.INFO) end
 
 function M.setup(opts)
+  for buf, owned in pairs(insert_mappings) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(buf, "i")) do
+        if mapping.callback == owned.callback then
+          vim.keymap.del("i", owned.lhs, { buffer = buf })
+        end
+      end
+    end
+  end
+  insert_mappings = {}
   config.setup(opts)
   require("ibid.hl").setup()
   local group = vim.api.nvim_create_augroup("ibid", { clear = true })
   vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = require("ibid.hl").setup })
   require("ibid.diagnostics").setup(group)
+  local function map_insert(buf)
+    local owned = insert_mappings[buf]
+    if owned then
+      for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(buf, "i")) do
+        if mapping.callback == owned.callback then vim.keymap.del("i", owned.lhs, { buffer = buf }) end
+      end
+      insert_mappings[buf] = nil
+    end
+    if not vim.tbl_contains(config.options.filetypes, vim.bo[buf].filetype) then return end
+    if type(config.options.insert_mapping) ~= "string" or config.options.insert_mapping == "" then return end
+    local callback = function() M.cite() end
+    vim.keymap.set("i", config.options.insert_mapping, callback,
+      { buffer = buf, desc = "ibid: cite" })
+    insert_mappings[buf] = { lhs = config.options.insert_mapping, callback = callback }
+  end
+  vim.api.nvim_create_autocmd("FileType", {
+    group = group, pattern = "*",
+    callback = function(ev) map_insert(ev.buf) end,
+  })
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group, callback = function(ev) insert_mappings[ev.buf] = nil end,
+  })
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.tbl_contains(config.options.filetypes, vim.bo[buf].filetype) then
+      map_insert(buf)
+    end
+  end
   vim.api.nvim_create_autocmd("BufWritePost", {
     group = group,
     callback = function(ev)
@@ -39,11 +77,17 @@ function M.cite(opts)
   opts = opts or {}
   local insert = require("ibid.cite.insert")
   local ctx = insert.capture()
-  if opts.keys then return insert.insert(opts.keys, ctx) end
+  if opts.replace then
+    ctx.range = require("ibid.cite.range").at(ctx.buf, ctx.row, ctx.cursor_col)
+    if not ctx.range then return notify("no supported citation under the cursor", vim.log.levels.WARN) end
+  end
+  if opts.keys then return insert.choose(opts.keys, ctx, opts) end
   require("ibid.cite.picker").pick({
     prompt = "Cite",
+    cite_ft = vim.bo[ctx.buf].filetype,
+    preselected = ctx.range and ctx.range.keys or nil,
     on_select = function(items)
-      insert.insert(vim.tbl_map(function(it) return it.key end, items), ctx)
+      insert.choose(vim.tbl_map(function(it) return it.key end, items), ctx, opts)
     end,
   })
 end
@@ -94,6 +138,16 @@ M.yank_reference = action("yank_reference", "Yank reference")
 
 -- Metadata findings; edits remain in Zotero.
 function M.lint() return require("ibid.lint").open() end
+
+function M.browse(opts) return require("ibid.browser").open(opts) end
+
+function M.note(opts)
+  M.with_item(function(item) require("ibid.notes").open(item, opts) end, "Literature note")
+end
+
+function M.backlinks(opts)
+  M.with_item(function(item) require("ibid.backlinks").open(item, opts) end, "Backlinks")
+end
 
 -- reload() — re-read the library now
 function M.reload()

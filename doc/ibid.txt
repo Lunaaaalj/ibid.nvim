@@ -55,11 +55,16 @@ command exists without it.
 :Ibid reload            Re-read the library now.
 :Ibid lint              List metadata findings in quickfix. <CR> selects the
                         item in Zotero; metadata edits happen there.
+:Ibid browse            Open the two-pane library browser (|ibid-browser|).
+:Ibid replace           Pick replacements for the citation under the cursor.
+:Ibid note              Open/create a literature note (|ibid-notes|).
+:Ibid backlinks         List citing documents in quickfix (|ibid-notes|).
 
 Lua: `require("ibid")` has `cite({ keys? })`, `cayw()`, `sync({ force,
 adopt })`, `info()`, `open_pdf()`, `show_in_zotero()`, `open_url()`,
 `yank_key()`, `yank_bibtex()`, `yank_reference()`, `reload()`,
-`cmp_source()`, `item(key)` and `lint()`.
+`cmp_source()`, `item(key)`, `lint()`, `browse(opts?)`, `note(opts?)` and
+`backlinks(opts?)`.
 
 ==============================================================================
 3. CITING                                                       *ibid-cite*
@@ -81,6 +86,38 @@ mode it goes at the cursor, and insert mode resumes after it.
 
 Picker keys (|ibid-keys|): <C-y> yank key, <C-b> yank BibTeX, <C-r> yank
 formatted reference, <C-o> open PDF, <C-z> show in Zotero.
+
+<C-t> cycles LaTeX commands; the native picker offers a cycle menu entry.
+The choice is remembered per filetype.
+`citation.locator = true` prompts after selection. Cancelling makes no edit.
+Lua callers can pass `cite({ locator = "p. 12", command = "parencite" })`.
+Set `insert_mapping = "<C-g>c"` for a buffer-local insert-mode trigger.
+`:Ibid replace` preselects the current keys. It handles simple LaTeX citations,
+pandoc brackets/bare keys, and Typst citations; unsupported ranges are refused.
+Simple commands and locators are preserved unless explicitly overridden.
+
+Library browser ~                                              *ibid-browser*
+Switch Library / Collections / Tags / Recent / Lint using <Tab>, <S-Tab> or
+1-5. j/k/G select rows; <CR> enters a collection/tag, cites an item, or selects
+a lint item in Zotero. <BS> returns to collection/tag selectors. / filters;
+i cites into the previous document; o opens PDF; gz selects in Zotero; gx opens
+DOI/URL; y/Y/R yank key/BibTeX/reference. r reloads, ? shows help, q/<Esc> close.
+The tab, filter and cursor survive closing. The detail pane currently shows
+the standard item card; rich annotation/note navigation follows in wave 3.
+
+Literature notes and backlinks ~                                  *ibid-notes*
+Set notes_dir and run :Ibid note. Metadata, abstract and annotations grouped by
+colour/page form the initial note. Stable annotation IDs prevent duplicates on
+subsequent runs; existing writing is preserved. Loaded notes are updated in
+their buffer without writing unsaved text to disk. note_format="typst" selects
+.typ output; Markdown is the default. Keys are encoded for safe filenames.
+
+:Ibid backlinks scans loaded documents and backlink_roots. rg is required for
+configured roots; candidate matches are verified by the citation scanner.
+Child notes are exposed in item.notes, annotations in item.annotations.
+`require("ibid.notes").child_text(note, cb)` uses pandoc when available, with a
+plain-text fallback. Page-aware callers can use
+`require("ibid.actions").open_pdf(item, {page=3, attachment_zkey="PDFKEY"})`.
 
 ==============================================================================
 4. SYNCING THE .BIB                                             *ibid-sync*
@@ -175,9 +212,18 @@ Pass a table to `require("ibid").setup()`; unset keys keep their defaults.
                         no bibliography.
 *ibid-diagnostics*      Warn on unknown keys (true).
 *ibid-lint.max_key_length* Warn about citation keys longer than this (100).
+*ibid-notes_dir*         Literature note directory (unset by default).
+*ibid-note_format*       "markdown" or "typst" ("markdown").
+*ibid-backlink_roots*    Directories searched by rg ({}); loaded buffers are
+                        searched even without configured roots.
+*ibid-insert_mapping*   Insert-mode citation mapping (false, opt-in).
+*ibid-citation*         commands: LaTeX command names; command_key: picker cycle
+                        key (<C-t>); locator: prompt for a locator (false);
+                        completion_limit: empty-query completion cap (50).
 *ibid-style*            CSL style id for formatted references (APA).
-*ibid-open_pdf*         function(path, item) to open attachments; nil uses
-                        |vim.ui.open()|.
+*ibid-open_pdf*         function(path, item, opts) to open attachments; opts may
+                        contain page and attachment_zkey. Two-argument hooks
+                        remain compatible. nil uses |vim.ui.open()|.
 *ibid-keys*             Picker keys; set one to false to disable it.
 *ibid-hl-overrides*     Highlight overrides, `{ IbidKey = { link = … } }`.
 
