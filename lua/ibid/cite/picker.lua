@@ -7,7 +7,7 @@ local library = require("ibid.library")
 local M = {}
 
 local function label(it)
-  return ("%s (%s)  %s"):format(it.authors ~= "" and it.authors or "—", it.year ~= "" and it.year or "n.d.", it.title)
+  return ("%s (%s)  %s"):format(it.authors ~= "" and it.authors or "—", it.year ~= "" and it.year or "n.d.", it.title) .. (it.library_name and ("  [" .. it.library_name .. "]") or "")
 end
 
 local function fallback(items, opts)
@@ -34,7 +34,7 @@ local function telescope(items, opts)
     return displayer({
       { it.authors ~= "" and it.authors or "—", "IbidAuthor" },
       { it.year ~= "" and it.year or "n.d.", "IbidYear" },
-      { it.title, "IbidTitle" },
+      { it.title .. (it.library_name and ("  [" .. it.library_name .. "]") or ""), "IbidTitle" },
     })
   end
 

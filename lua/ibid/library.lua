@@ -56,8 +56,17 @@ local function attachment_path(a)
   if not p or p == "" then return nil end
   local name = p:match("^storage:(.+)")
   if name then return ("%s/storage/%s/%s"):format(config.data_dir(), a.zkey, name) end
-  if p:sub(1, 1) == "/" then return p end
-  return nil -- "attachments:" (base-dir relative) and linked URLs
+  local profile = require("ibid.profile")
+  local relative = p:match("^attachments:(.+)")
+  if relative then
+    local base = profile.current(config.options.data_dir).prefs["extensions.zotero.baseAttachmentPath"]
+    if type(base) == "string" and base ~= "" and profile.is_absolute(base) then
+      return profile.normalize(base .. "/" .. relative)
+    end
+    return nil
+  end
+  if profile.is_absolute(p) then return profile.normalize(p) end
+  return nil -- linked URLs are not local attachments
 end
 
 local function normalise(raw)
@@ -98,15 +107,17 @@ end
 
 local function index(data, signature)
   local lib = { items = {}, by_key = {}, by_zkey = {}, collections = {}, groups = {}, signature = signature }
+  for _, g in ipairs(data.groups or {}) do lib.groups[g.lib] = g end
   for _, raw in ipairs(data.items or {}) do
     local it = normalise(raw)
+    it.library_name = lib.groups[it.lib] and lib.groups[it.lib].name or "My Library"
+    it.search = it.search .. " " .. it.library_name
     table.insert(lib.items, it)
     lib.by_zkey[it.zkey] = it
     if it.key and it.key ~= "" then lib.by_key[it.key] = it end
   end
   table.sort(lib.items, function(a, b) return (a.added or "") > (b.added or "") end)
   for _, c in ipairs(data.collections or {}) do lib.collections[c.id] = c end
-  for _, g in ipairs(data.groups or {}) do lib.groups[g.lib] = g end
   return lib
 end
 

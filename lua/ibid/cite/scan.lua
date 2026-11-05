@@ -154,21 +154,33 @@ local function pandoc(text, add)
   end)
 end
 
-local function typst(text, add)
+local function labels_of(text)
   local labels = {}
-  for s, l in text:gmatch("()<([%w_:%.%-]+)>") do
-    if not text:sub(math.max(1, s - 6), s - 1):find("cite%($") then labels[l] = true end
+  text = text:gsub('"[^"\n]*"', blank)
+  for s, label in text:gmatch("()<([%w_:%.%-]+)>") do
+    if not text:sub(1, s - 1):match("cite%s*%(%s*$") then labels[label] = true end
   end
-  at_keys(text, add, "[%w_:%.%-]*", function(key) return labels[key] end)
-  for s, key in text:gmatch("cite%(<()([%w_:%.%-]+)>") do add(key, s, s + #key - 1) end
-  for s, key in text:gmatch('cite%(%s*label%(%s*"()([^"]+)"') do add(key, s, s + #key - 1) end
+  return labels
+end
+
+local function typst(text, add, project_labels)
+  local labels = vim.tbl_extend("force", {}, project_labels or {}, labels_of(text))
+  at_keys(text:gsub('"[^"\n]*"', blank), add, "[%w_:%.%-]*", function(key) return labels[key] end)
+  for s, key in text:gmatch("cite%s*%(%s*<()([%w_:%.%-]+)>") do add(key, s, s + #key - 1) end
+  for s, key in text:gmatch('cite%s*%(%s*label%(%s*"()([^"]+)"') do add(key, s, s + #key - 1) end
 end
 
 local scanners = { tex = tex, pandoc = pandoc, typst = typst }
 
 -- scan_lines(lines, syntax) → { { key, lnum, col, end_col }, … } (0-based,
 -- end exclusive)
-function M.scan_lines(lines, syntax)
+M.clean_lines = sanitise
+
+function M.labels(lines)
+  return labels_of(table.concat(sanitise(lines, "typst"), "\n"))
+end
+
+function M.scan_lines(lines, syntax, labels)
   local fn = scanners[syntax]
   if not fn then return {} end
   local clean = sanitise(lines, syntax)
@@ -180,7 +192,7 @@ function M.scan_lines(lines, syntax)
     local lnum, col = locate(s)
     local elnum, ecol = locate(e)
     table.insert(found, { key = key, lnum = lnum, col = col, end_lnum = elnum, end_col = ecol + 1 })
-  end)
+  end, labels)
   return found
 end
 
@@ -201,29 +213,35 @@ function M.key_at(buf, row, col)
   end
 end
 
--- Every key cited by the document: the buffer, plus (LaTeX with VimTeX) the
--- project's other source files. Returns a sorted list.
-function M.project_keys(buf)
+-- Project-wide labels are used for diagnostics as well as bibliography sync.
+function M.project_scan(buf)
   buf = buf == 0 and vim.api.nvim_get_current_buf() or buf
-  local syntax = M.syntax(vim.bo[buf].filetype)
-  local seen = {}
-  for _, f in ipairs(M.scan(buf)) do seen[f.key] = true end
-  local vt = syntax == "tex" and vim.b[buf].vimtex
-  if type(vt) == "table" and type(vt.sources) == "table" and vt.root then
-    local this = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
-    for _, src in ipairs(vt.sources) do
-      local path = vim.fs.normalize(src:sub(1, 1) == "/" and src or (vt.root .. "/" .. src))
-      if path ~= this then
-        local b = vim.fn.bufnr(path)
-        local lines = (b > 0 and vim.api.nvim_buf_is_loaded(b)) and vim.api.nvim_buf_get_lines(b, 0, -1, false)
-          or (vim.uv.fs_stat(path) and vim.fn.readfile(path)) or {}
-        for _, f in ipairs(M.scan_lines(lines, "tex")) do seen[f.key] = true end
-      end
+  local project = require("ibid.project").discover(buf)
+  local labels = {}
+  if project.syntax == "typst" then
+    for _, path in ipairs(project.paths) do
+      labels = vim.tbl_extend("force", labels, M.labels(require("ibid.project").lines(path) or {}))
     end
+  end
+  return M.scan_lines(vim.api.nvim_buf_get_lines(buf, 0, -1, false), project.syntax, labels)
+end
+
+-- Sorted keys first, discovery error second. Callers that write/prune must
+-- check the error: an incomplete source graph is not evidence a key is unused.
+function M.project_keys(buf)
+  local project = require("ibid.project").discover(buf)
+  local labels, seen = {}, {}
+  if project.syntax == "typst" then
+    for _, path in ipairs(project.paths) do
+      labels = vim.tbl_extend("force", labels, M.labels(require("ibid.project").lines(path) or {}))
+    end
+  end
+  for _, path in ipairs(project.paths) do
+    for _, found in ipairs(M.scan_lines(require("ibid.project").lines(path) or {}, project.syntax, labels)) do seen[found.key] = true end
   end
   local keys = vim.tbl_keys(seen)
   table.sort(keys)
-  return keys
+  return keys, #project.errors > 0 and table.concat(project.errors, "; ") or nil
 end
 
 return M

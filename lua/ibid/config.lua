@@ -38,6 +38,8 @@ M.defaults = {
   },
   -- warn about cited keys that are neither in Zotero nor in an unmanaged .bib
   diagnostics = true,
+  -- library metadata checks (:Ibid lint)
+  lint = { max_key_length = 100 },
   -- CSL style for "yank formatted reference"
   style = "http://www.zotero.org/styles/apa",
   -- function(path, item) opening an attachment; nil = vim.ui.open
@@ -57,27 +59,13 @@ M.defaults = {
 M.options = vim.deepcopy(M.defaults)
 
 function M.setup(opts)
+  require("ibid.profile").invalidate()
   M.options = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), opts or {})
 end
 
--- Zotero's data directory: the option, the profile's dataDir pref, ~/Zotero.
-local data_dir
+-- Profile discovery also supplies linked-attachment preferences.
 function M.data_dir()
-  if M.options.data_dir then return vim.fs.normalize(M.options.data_dir) end
-  if data_dir then return data_dir end
-  local profiles = vim.fn.expand("~/Library/Application Support/Zotero/Profiles")
-  if vim.fn.has("mac") == 0 then profiles = vim.fn.expand("~/.zotero/zotero") end
-  for _, prefs in ipairs(vim.fn.glob(profiles .. "/*/prefs.js", false, true)) do
-    for line in io.lines(prefs) do
-      local dir = line:match('^user_pref%("extensions%.zotero%.dataDir", "(.-)"%);')
-      if dir and vim.uv.fs_stat(dir .. "/zotero.sqlite") then
-        data_dir = dir
-        return dir
-      end
-    end
-  end
-  data_dir = vim.fn.expand("~/Zotero")
-  return data_dir
+  return require("ibid.profile").current(M.options.data_dir).data_dir
 end
 
 return M
