@@ -118,7 +118,7 @@ test("library resolves linked Windows and stored attachments and retains group k
         { path = "storage:paper.pdf", zkey = "PDF04" },
       },
     } } }
-    write(cache, vim.json.encode({ signature = "portability-fixture", data = raw }))
+    write(cache, vim.json.encode({ version = 2, signature = "portability-fixture", data = raw }))
     package.loaded["ibid.source.sqlite"] = { signature = function() return "portability-fixture" end }
     package.loaded["ibid.library"] = nil
     local library = require("ibid.library")

@@ -93,6 +93,8 @@ local function normalise(raw)
     tags = raw.tags or {},
     collections = raw.collections or {},
     attachments = {},
+    annotations = {},
+    notes = raw.notes or {},
     added = raw.added,
     modified = raw.modified,
     fields = f,
@@ -100,6 +102,21 @@ local function normalise(raw)
   for _, a in ipairs(raw.attachments or {}) do
     table.insert(it.attachments, { zkey = a.zkey, type = a.type, title = a.title, path = attachment_path(a) })
   end
+  for _, annotation in ipairs(raw.annotations or {}) do
+    local a = vim.deepcopy(annotation)
+    if type(a.position) == "string" then
+      local ok, position = pcall(vim.json.decode, a.position)
+      a.position = ok and type(position) == "table" and position or nil
+    end
+    a.id = a.zkey or tostring(a.id)
+    local page_index = a.position and tonumber(a.position.pageIndex)
+    a.page = page_index and page_index >= 0 and page_index + 1 or nil
+    table.insert(it.annotations, a)
+  end
+  table.sort(it.annotations, function(a, b)
+    if (a.page or math.huge) ~= (b.page or math.huge) then return (a.page or math.huge) < (b.page or math.huge) end
+    return a.id < b.id
+  end)
   it.search = table.concat({ it.key or "", it.author_list, it.year, it.title, it.container or "",
     table.concat(it.tags, " ") }, " ")
   return it
@@ -127,11 +144,11 @@ local function read_cache(signature)
   local raw = fd:read("*a")
   fd:close()
   local ok, c = pcall(vim.json.decode, raw, { luanil = { object = true, array = true } })
-  if ok and type(c) == "table" and c.signature == signature and c.data then return c.data end
+  if ok and type(c) == "table" and c.version == 2 and c.signature == signature and c.data then return c.data end
 end
 
 local function write_cache(signature, data)
-  local ok, raw = pcall(vim.json.encode, { signature = signature, data = data })
+  local ok, raw = pcall(vim.json.encode, { version = 2, signature = signature, data = data })
   if not ok then return end
   vim.fn.mkdir(vim.fs.dirname(cache_file), "p")
   vim.uv.fs_open(cache_file, "w", 420, function(err, fd)
@@ -192,9 +209,9 @@ function M.select_url(it)
   return "zotero://select/library/items/" .. it.zkey
 end
 
-function M.pdf(it)
+function M.pdf(it, attachment_zkey)
   for _, a in ipairs(it.attachments or {}) do
-    if a.type == "application/pdf" and a.path and vim.uv.fs_stat(a.path) then return a.path end
+    if (not attachment_zkey or attachment_zkey == a.zkey) and a.type == "application/pdf" and a.path and vim.uv.fs_stat(a.path) then return a.path end
   end
 end
 
