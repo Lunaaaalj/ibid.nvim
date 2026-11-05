@@ -6,6 +6,10 @@ local remembered = { tab = 1, filter = "", cursors = {}, scopes = {} }
 local current
 
 local function valid_win(win) return win and vim.api.nvim_win_is_valid(win) end
+local function valid_origin(s)
+  return valid_win(s.ctx.win) and vim.api.nvim_buf_is_valid(s.ctx.buf)
+    and vim.api.nvim_win_get_buf(s.ctx.win) == s.ctx.buf
+end
 local function set_lines(buf, lines)
   if not vim.api.nvim_buf_is_valid(buf) then return end
   vim.bo[buf].modifiable = true
@@ -149,6 +153,8 @@ function M.open(opts)
   s.scope = s.scopes[s.tab]
   function s.close()
     if not s.alive then return end
+    local focused = vim.api.nvim_get_current_win()
+    local restore = focused == s.list_win or focused == s.detail_win
     save_cursor(s)
     remembered = {tab=s.tab,filter=s.filter,cursors=vim.deepcopy(s.cursors),scopes=vim.deepcopy(s.scopes)}
     s.alive = false
@@ -156,7 +162,7 @@ function M.open(opts)
     if s.group then vim.api.nvim_del_augroup_by_id(s.group) end
     for _, win in ipairs({s.list_win or false,s.detail_win or false}) do if valid_win(win) then vim.api.nvim_win_close(win,true) end end
     for _, buf in ipairs({s.list_buf or false,s.detail_buf or false}) do if buf and vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf,{force=true}) end end
-    if valid_win(s.ctx.win) then vim.api.nvim_set_current_win(s.ctx.win) end
+    if restore and valid_origin(s) then vim.api.nvim_set_current_win(s.ctx.win) end
   end
   function s.switch_tab(tab)
     if not s.alive then return end
@@ -182,12 +188,15 @@ function M.open(opts)
     s.request=s.request+1
     local token=s.request
     local library=require("ibid.library")
-    if reload then library.invalidate() end
+    if reload then require("ibid.profile").invalidate(); library.invalidate() end
     library.get(function(err,lib)
       if not s.alive or token ~= s.request then return end
       if err then s.close(); return vim.notify("ibid: " .. err,vim.log.levels.ERROR) end
       s.lib=lib
       if not s.list_buf then
+        -- A late load must not open over a different document/window.
+        if not valid_origin(s) or vim.api.nvim_get_current_win() ~= s.ctx.win then s.close(); return end
+        vim.cmd("stopinsert")
         s.list_buf=vim.api.nvim_create_buf(false,true)
         s.detail_buf=vim.api.nvim_create_buf(false,true)
         for _,buf in ipairs({s.list_buf,s.detail_buf}) do vim.bo[buf].bufhidden="wipe"; vim.bo[buf].swapfile=false end

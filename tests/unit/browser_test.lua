@@ -167,4 +167,37 @@ test("closed loading session and stale reload callbacks cannot reopen or replace
   h.eq(false,s.alive)
 end)
 
+test("insert-mode capture is preserved while the browser stops insert mode",function(c)
+  local original_mode, original_cmd = vim.api.nvim_get_mode, vim.cmd
+  local stopped, captured = false, nil
+  local ok,err=xpcall(function()
+    vim.api.nvim_get_mode=function() return {mode="i",blocking=false} end
+    vim.cmd=function(command)
+      if command == "stopinsert" then stopped=true end
+      return original_cmd(command)
+    end
+    local s=c.open({on_select=function(_,ctx) captured=ctx end})
+    h.truthy(stopped)
+    h.eq(true,s.ctx.insert)
+    c.key(s,"i")
+    h.eq(true,captured.insert)
+  end,debug.traceback)
+  vim.api.nvim_get_mode,vim.cmd=original_mode,original_cmd
+  if not ok then error(err) end
+end)
+
+test("late library load does not steal focus after the source window changes",function(c,lib)
+  local callback
+  lib.get=function(cb)callback=cb end
+  local s=c.open()
+  local replacement=vim.api.nvim_create_buf(false,true)
+  vim.api.nvim_win_set_buf(c.win,replacement)
+  callback(nil,c.lib)
+  h.eq(false,s.alive)
+  h.eq(nil,s.list_win)
+  h.eq(replacement,vim.api.nvim_get_current_buf())
+  vim.api.nvim_win_set_buf(c.win,c.doc)
+  vim.api.nvim_buf_delete(replacement,{force=true})
+end)
+
 return cases
