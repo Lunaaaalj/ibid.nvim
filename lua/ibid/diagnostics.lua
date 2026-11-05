@@ -22,7 +22,7 @@ local function apply(buf, syntax, lib)
     end
   end
   local diags = {}
-  for _, f in ipairs(scan.scan(buf)) do
+  for _, f in ipairs(scan.project_scan(buf)) do
     if not lib.by_key[f.key] and not foreign[f.key] then
       table.insert(diags, {
         lnum = f.lnum, col = f.col, end_lnum = f.end_lnum, end_col = f.end_col,

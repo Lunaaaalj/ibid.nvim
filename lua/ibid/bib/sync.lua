@@ -122,7 +122,8 @@ function M.sync(buf, opts, cb)
 
   library.get(function(err, lib)
     if err then return finish(err) end
-    local cited = scan.project_keys(buf)
+    local cited, project_error = scan.project_keys(buf)
+    if project_error then return finish("cannot sync incomplete project: " .. project_error) end
     local foreign = {}
     for _, o in ipairs(others) do
       for k in pairs(M.keys_in(o.path)) do foreign[k] = true end

@@ -21,6 +21,7 @@ local subs = {
   bibtex = function(ibid) ibid.yank_bibtex() end,
   reference = function(ibid) ibid.yank_reference() end,
   reload = function(ibid) ibid.reload() end,
+  lint = function(ibid) ibid.lint() end,
 }
 
 vim.api.nvim_create_user_command("Ibid", function(cmd)

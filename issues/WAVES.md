@@ -7,30 +7,35 @@ it does not start implementation or close issues.
 ## Execution model
 
 Use one coordinator plus up to three worker agents per wave (four concurrent
-agents total). Each worker uses an isolated branch/worktree based on the same
-accepted baseline. The coordinator assigns file ownership, reviews changes,
-integrates them sequentially, and runs the combined checks before the next wave.
+agents total). Starting with the next wave, each worker uses an isolated
+branch/worktree based on the same accepted baseline, commits and pushes its own
+changes, and opens its own pull request. The coordinator assigns file ownership,
+reviews each PR's diff and checks, requests fixes from the owning agent, and
+runs the combined checks before the next wave. Deliver work through PRs rather
+than copying files from agent worktrees into the coordinator's checkout.
+Integrate accepted PRs in dependency order under the session's merge authorization.
 Unused worker slots can review completed work; three implementation lanes are
 a ceiling, not a requirement.
 
 The coordinator owns shared integration edits in `lua/ibid/init.lua`,
 `plugin/ibid.lua`, configuration defaults, `README.md`, and `doc/ibid.txt`.
-Workers supply proposed API/config/command changes with their patches. Assign
+Workers describe proposed API/config/command changes in their PRs; the coordinator
+implements shared wiring in a separate integration PR after the contracts settle. Assign
 other shared files to exactly one worker within each wave. Feature tests live
 beside each feature's fixtures; only the test-harness owner edits the runner.
 
 Every assignment includes: issue/subtask, base commit, owned paths, API contract,
 dependencies, acceptance cases, and explicit exclusions. Every handoff includes:
-commit, changed paths, checks run and results, remaining limitations, and which
+branch, worktree, commit, PR URL, changed paths, checks run and results, remaining limitations, and which
 issue acceptance criteria are satisfied. A failing gate produces a repair pass
 before downstream work begins.
 
 ## Wave 0 — Establish a reliable baseline
 
-Local implementation complete: 48 tests pass on Neovim 0.11.6, with a generated
-SQLite fixture and deferred stubbed BBT exports. Stable/nightly CI is configured
-in `.github/workflows/tests.yml`; remote results remain unverified, so #11 stays
-open. See `tests/README.md` for the identical-re-export timestamp caveat. Database
+Wave 0 merged in PR #12. All 48 tests passed on Neovim 0.11.6, with a generated
+SQLite fixture and deferred stubbed BBT exports. Stable and nightly CI both
+passed in GitHub Actions run 42059650360. See `tests/README.md` for the
+identical-re-export timestamp caveat. Database
 tests cover WAL signatures, not concurrent live WAL replay. Production behavior
 is unchanged.
 
@@ -51,6 +56,16 @@ mtime after an identical re-export, which may still trigger document watchers.
 Record the intended behavior rather than silently enshrining it as correct.
 
 ## Wave 1 — Correctness and independent core features
+
+Implemented locally on `feat/wave-1-core`: multi-file project discovery with
+incomplete-project sync protection (#8), profile/attachment portability and group
+picker identity (#10), and lint/identity providers plus `:Ibid lint` (#2).
+The integrated suite has 80 passing tests on Neovim 0.11.6 (32 new cases).
+Wave 1 remote CI and native Windows/Linux desktop smoke checks remain pending.
+The lint browser tab depends on #1, and Crossref/add actions depend on #3;
+those portions of #2 remain scheduled for later waves. Automatic root discovery
+is bounded and can be overridden with `b:ibid_root`; Quarto chapter syntax is
+limited to literal lists/parts. Unsupported discovery stops sync.
 
 | Worker | Assignment | Owned area |
 | --- | --- | --- |

@@ -92,8 +92,12 @@ M.yank_key = action("yank_key", "Yank key")
 M.yank_bibtex = action("yank_bibtex", "Yank BibTeX")
 M.yank_reference = action("yank_reference", "Yank reference")
 
+-- Metadata findings; edits remain in Zotero.
+function M.lint() return require("ibid.lint").open() end
+
 -- reload() — re-read the library now
 function M.reload()
+  require("ibid.profile").invalidate()
   local library = require("ibid.library")
   library.invalidate()
   library.lib = nil

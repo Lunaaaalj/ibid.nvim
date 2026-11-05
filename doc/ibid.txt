@@ -45,16 +45,21 @@ command exists without it.
                         Zotero, `q` close.
 :Ibid pdf               Open the item's PDF attachment (|ibid-open_pdf|).
 :Ibid zotero            Select the item in Zotero (`zotero://select`).
+                        Linux needs a desktop handler for zotero:// URLs.
+                        If unavailable, yank the key with :Ibid key and
+                        search for it in Zotero.
 :Ibid url               Open the DOI, else the URL.
 :Ibid key               Yank the citation key.
 :Ibid bibtex            Yank its BibTeX/BibLaTeX entry.
 :Ibid reference         Yank a formatted reference (|ibid-style|).
 :Ibid reload            Re-read the library now.
+:Ibid lint              List metadata findings in quickfix. <CR> selects the
+                        item in Zotero; metadata edits happen there.
 
 Lua: `require("ibid")` has `cite({ keys? })`, `cayw()`, `sync({ force,
 adopt })`, `info()`, `open_pdf()`, `show_in_zotero()`, `open_url()`,
 `yank_key()`, `yank_bibtex()`, `yank_reference()`, `reload()`,
-`cmp_source()` and `item(key)`.
+`cmp_source()`, `item(key)` and `lint()`.
 
 ==============================================================================
 3. CITING                                                       *ibid-cite*
@@ -94,7 +99,8 @@ pulled from Zotero, and they're never touched.
 
 The file starts with a `%` header line that marks it as managed, followed by
 the entries sorted by key. A sync:
-- collects the cited keys (with VimTeX, from every file of the project)
+- collects project keys: Typst local includes/imports, Quarto book chapters,
+  LaTeX inputs/includes (using VimTeX's source list when available)
 - keeps entries already in the file unless Zotero modified the item after
   the file was written, so Zotero only has to be running when a key is
   cited for the first time
@@ -106,15 +112,29 @@ A declared .bib that exists and isn't managed is never overwritten; `:Ibid
 sync!` takes it over. Once a document has a managed .bib, every |:w| syncs
 it (|ibid-bib.sync_on_save|).
 
+LaTeX also follows `% !TEX root = main.tex`. Typst/LaTeX root lookup checks
+the current directory and four ancestors, stopping at a repository or home
+boundary. Set `b:ibid_root` to a main file (relative to the chapter) if the root
+is ambiguous or outside that range. Loaded buffers supply unsaved text.
+Missing files and unsupported project expressions stop sync to avoid pruning
+an incomplete citation set. Quarto supports literal chapter lists and nested
+parts. A chapter's own front matter bibliography keeps its citation scope local.
+
 ==============================================================================
 5. DIAGNOSTICS, HOVER, COMPLETION                       *ibid-integrations*
 
 Diagnostics ~
+`:Ibid lint` checks library metadata separately from document diagnostics:
+missing creators/year, unusual keys, likely swapped names, missing article or
+conference DOIs, duplicates, and PDF files missing on disk. Swapped-name checks
+are explained heuristics. Fix metadata in Zotero and reload. The findings are
+also available as `require("ibid.lint").check(lib)` for other views.
+
 Cited keys that are neither in Zotero nor in one of the document's
 hand-written .bib files get a warning (source `ibid`). LaTeX buffers are
 always checked. pandoc and Typst buffers are only checked when they declare
 a bibliography, so a README's @mentions aren't flagged. Typst `@ref`s to
-labels defined in the same buffer and Quarto cross-references (`@fig-x`,
+labels defined in the project and Quarto cross-references (`@fig-x`,
 `@tbl-x`, …) are not citations.
 
 Hover ~
@@ -135,6 +155,10 @@ Pass a table to `require("ibid").setup()`; unset keys keep their defaults.
 
 *ibid-data_dir*         Zotero data directory. nil: the profile's
                         `extensions.zotero.dataDir`, else ~/Zotero.
+                        Discovery supports macOS, Linux, Flatpak and Windows,
+                        preferring profiles.ini defaults. Relative linked
+                        attachments use baseAttachmentPath from the matching
+                        profile. :Ibid reload refreshes profile preferences.
 *ibid-port*             Zotero's HTTP port (23119).
 *ibid-timeout*          ms before a request to Zotero is given up (8000).
 *ibid-filetypes*        Where citing, completion, diagnostics and hover
@@ -150,6 +174,7 @@ Pass a table to `require("ibid").setup()`; unset keys keep their defaults.
 *ibid-bib.fallback*     function(bufnr) -> path for documents that declare
                         no bibliography.
 *ibid-diagnostics*      Warn on unknown keys (true).
+*ibid-lint.max_key_length* Warn about citation keys longer than this (100).
 *ibid-style*            CSL style id for formatted references (APA).
 *ibid-open_pdf*         function(path, item) to open attachments; nil uses
                         |vim.ui.open()|.

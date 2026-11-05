@@ -13,6 +13,12 @@ vim.opt.packpath = {}
 package.path = root .. "/?.lua;" .. root .. "/lua/?.lua;" .. root .. "/lua/?/init.lua;" .. package.path
 local helpers = require("tests.helpers")
 local config = require("ibid.config")
+local profile = require("ibid.profile")
+local profile_roots = profile.roots
+profile.roots = function(opts)
+  if opts and (opts.home or opts.platform or opts.appdata) then return profile_roots(opts) end
+  return { sandbox .. "/profiles" }
+end
 config.defaults.data_dir = sandbox .. "/zotero"
 config.setup({})
 -- All external calls in this suite must be fixture SQLite queries. Accidental

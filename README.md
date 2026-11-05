@@ -23,6 +23,17 @@ Nothing ever writes to Zotero's database. Reads come from a copy of `zotero.sqli
 
 Run `:checkhealth ibid` to check the setup.
 
+Profile discovery supports macOS, native Linux, Flatpak and Windows, using
+`profiles.ini` defaults when available. Set `data_dir` explicitly to choose a
+library. Relative linked attachments (`attachments:`) use the matching profile's
+`extensions.zotero.baseAttachmentPath`; unresolved paths stay unavailable.
+Group names appear in the picker and are searchable. Run `:Ibid reload` after
+changing profile preferences.
+
+On Linux, `:Ibid zotero` needs a desktop handler for `zotero://` URLs. If the
+desktop cannot open that scheme, use `:Ibid key` and search for the key in Zotero,
+or register Zotero as the scheme's handler in your desktop settings.
+
 ## Install
 
 lazy.nvim:
@@ -81,13 +92,24 @@ The target is the bibliography the document declares:
 `:Ibid sync` writes the cited entries to that file, sorted by key, after a header line that marks it as managed by ibid.
 The rules:
 
-- **Keys** come from the buffer. For LaTeX with VimTeX, they come from every file of the project.
+- **Keys** come from the document project: Typst local includes/imports, Quarto
+  book chapters, or LaTeX inputs/includes (using VimTeX when available).
 - **Entries already in the file are kept**, unless Zotero modified the item after the file was written. So Zotero only needs to be running when a key is cited for the first time.
 - **Entries no longer cited are removed** (`bib.prune`).
 - **The file is only written when its content changes**, so latexmk and typst watchers don't rebuild for nothing.
 - **Keys defined in the document's other, hand-written `.bib` files** are left alone.
 - **Hand-written `.bib` files are never overwritten.** If the declared `.bib` exists and isn't managed, `:Ibid sync!` takes it over. The `!` also re-exports every entry.
 - **Once a document has a managed `.bib`, every `:w` syncs it** (`bib.sync_on_save`).
+
+LaTeX also reads `% !TEX root = main.tex`. For Typst and LaTeX, automatic root
+lookup checks the current directory and up to four ancestors, stopping at the
+repository or home boundary. Set `b:ibid_root` to the main document's path when
+it is outside that range or several roots include the chapter. Paths are
+relative to the chapter. Loaded buffers supply unsaved text. Missing sources or
+unsupported project expressions stop sync instead of pruning an incomplete
+set of citations. Quarto supports literal chapter lists, including nested parts.
+Book-wide collection applies when the bibliography comes from `_quarto.yml`;
+a chapter's own front matter bibliography keeps its scope local.
 
 ## Commands
 
@@ -99,8 +121,15 @@ The rules:
 | `:Ibid info` · `pdf` · `zotero` · `url` | the item under the cursor (else a picker): card · open PDF · show in Zotero · DOI/URL |
 | `:Ibid key` · `bibtex` · `reference` | yank the key · its BibTeX entry · a formatted reference |
 | `:Ibid reload` | re-read the library |
+| `:Ibid lint` | list metadata findings; `<CR>` selects the item in Zotero |
 
 ## Configuration
+
+`:Ibid lint` checks missing creators/year, unusual citation keys, likely swapped
+names, missing article/conference DOIs, duplicate DOI or title/year, and PDF
+attachments missing on disk. Swapped-name findings are heuristics, with the
+reason included in each finding. Change metadata in Zotero and reload to check
+again. Crossref lookup and adding items are planned separately.
 
 Defaults (see `lua/ibid/config.lua`):
 
@@ -122,6 +151,7 @@ require("ibid").setup({
     fallback = nil,        -- function(bufnr) -> path
   },
   diagnostics = true,
+  lint = { max_key_length = 100 },
   style = "http://www.zotero.org/styles/apa",
   open_pdf = nil,          -- function(path, item); nil = vim.ui.open
   keys = { yank_key = "<C-y>", yank_bibtex = "<C-b>", yank_reference = "<C-r>",

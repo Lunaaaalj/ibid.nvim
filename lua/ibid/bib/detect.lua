@@ -10,29 +10,20 @@ local scan = require("ibid.cite.scan")
 
 local M = {}
 
-local function lines_of(path)
-  local b = vim.fn.bufnr(path)
-  if b > 0 and vim.api.nvim_buf_is_loaded(b) then return vim.api.nvim_buf_get_lines(b, 0, -1, false) end
-  return vim.uv.fs_stat(path) and vim.fn.readfile(path) or {}
-end
-
 local function resolve(dir, p)
   p = vim.trim(p)
   p = p:gsub("^[\"']", ""):gsub("[\"']$", "")
-  p = vim.fn.expand(p)
-  if p:sub(1, 1) ~= "/" then p = dir .. "/" .. p end
-  return vim.fs.normalize(p)
+  local profile = require("ibid.profile")
+  p = profile.normalize(vim.fn.expand(profile.normalize(p)))
+  if not profile.is_absolute(p) then p = dir .. "/" .. p end
+  return profile.normalize(p)
 end
 
 local function tex(buf)
-  local main = vim.api.nvim_buf_get_name(buf)
-  local vt = vim.b[buf].vimtex
-  if type(vt) == "table" and type(vt.tex) == "string" and vt.tex ~= "" then main = vt.tex end
+  local project = require("ibid.project").discover(buf)
+  local main = project.root
   local dir = vim.fs.dirname(main)
-  local text = table.concat(lines_of(main) or {}, "\n")
-  if main == vim.api.nvim_buf_get_name(buf) then
-    text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  end
+  local text = table.concat(require("ibid.project").lines(main) or {}, "\n")
   text = text:gsub("%%[^\n]*", "")
   local out = {}
   for list in text:gmatch("\\addbibresource%s*%b[]%s*(%b{})") do
@@ -86,7 +77,7 @@ local function pandoc(buf)
   if not names then
     local proj = vim.fs.find("_quarto.yml", { upward = true, path = dir, stop = vim.uv.os_homedir() })[1]
     if proj then
-      local pl = vim.fn.readfile(proj)
+      local pl = require("ibid.project").lines(proj) or {}
       names = yaml_bib(pl, 1, #pl)
       dir = vim.fs.dirname(proj)
     end
@@ -96,8 +87,9 @@ local function pandoc(buf)
 end
 
 local function typst(buf)
-  local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  local dir = vim.fs.dirname(vim.api.nvim_buf_get_name(buf))
+  local root = require("ibid.project").discover(buf).root
+  local text = table.concat(require("ibid.project").lines(root) or {}, "\n")
+  local dir = vim.fs.dirname(root)
   local out = {}
   for args in text:gmatch("#bibliography(%b())") do
     local first = args:match('^%(%s*(%b())') or args
