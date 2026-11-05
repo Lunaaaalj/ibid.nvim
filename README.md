@@ -137,3 +137,9 @@ The `User IbidLibraryChanged` event fires after the library is re-read.
 Zotero keeps `zotero.sqlite` locked and in WAL mode while it runs. ibid copies the database and its `-wal` file to a per-process cache directory and reads the copy with one `sqlite3` query that returns the library as a single JSON document.
 It only re-reads when the database or WAL changes, which costs a `stat` per check. A library of a few hundred items loads in about 20 ms.
 Exports, formatted references and CAYW go through Better BibTeX's JSON-RPC on `127.0.0.1:23119`.
+
+## Development
+
+Run the test suite with `nvim --headless -l tests/run.lua` (requires `sqlite3`).
+Tests use disposable databases and stubbed Better BibTeX responses; Zotero is not
+required. See [tests/README.md](tests/README.md) for coverage and timestamp behavior.
