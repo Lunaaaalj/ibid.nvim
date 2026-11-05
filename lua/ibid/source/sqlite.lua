@@ -38,6 +38,20 @@ select json_object(
         where it.itemID = i.itemID)),
       'collections', json((
         select json_group_array(ci.collectionID) from collectionItems ci where ci.itemID = i.itemID)),
+      'notes', json((
+        select json_group_array(json_object('id', n.itemID, 'zkey', ni.key, 'html', n.note))
+        from itemNotes n join items ni on ni.itemID = n.itemID
+        where n.parentItemID = i.itemID and n.itemID not in (select itemID from deletedItems))),
+      'annotations', json((
+        select json_group_array(json_object('id', an.itemID, 'zkey', ai.key,
+          'text', an.text, 'comment', an.comment, 'color', an.color,
+          'page_label', an.pageLabel, 'position', an.position, 'attachment_zkey', pa.key))
+        from itemAnnotations an join items ai on ai.itemID = an.itemID
+          join itemAttachments p on p.itemID = an.parentItemID
+          join items pa on pa.itemID = p.itemID
+        where p.parentItemID = i.itemID
+          and an.itemID not in (select itemID from deletedItems)
+          and p.itemID not in (select itemID from deletedItems))),
       'attachments', json((
         select json_group_array(json_object(
           'zkey', a.key, 'type', ia.contentType, 'path', ia.path, 'mode', ia.linkMode,

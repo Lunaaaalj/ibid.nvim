@@ -30,10 +30,11 @@ function M.yank_reference(it)
   end)
 end
 
-function M.open_pdf(it)
-  local pdf = library.pdf(it)
+function M.open_pdf(it, opts)
+  opts = opts or {}
+  local pdf = library.pdf(it, opts.attachment_zkey)
   if not pdf then return notify(it.key .. " has no PDF attachment on disk", vim.log.levels.WARN) end
-  if config.options.open_pdf then return config.options.open_pdf(pdf, it) end
+  if config.options.open_pdf then return config.options.open_pdf(pdf, it, opts) end
   vim.ui.open(pdf)
 end
 

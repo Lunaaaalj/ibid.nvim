@@ -39,3 +39,8 @@ INSERT INTO collectionItems VALUES (2,1),(3,2);
 INSERT INTO groups VALUES (2,42,'Fixture Group');
 INSERT INTO itemAttachments VALUES (10,1,'application/pdf','storage:paper.pdf',0),(11,1,'application/pdf','storage:deleted.pdf',0),(12,2,'application/pdf','/fixture/linked.pdf',2);
 INSERT INTO deletedItems VALUES (4),(11);
+
+CREATE TABLE itemNotes (itemID INTEGER PRIMARY KEY, parentItemID INTEGER, note TEXT, title TEXT);
+CREATE TABLE itemAnnotations (itemID INTEGER PRIMARY KEY, parentItemID INTEGER, text TEXT, comment TEXT, color TEXT, pageLabel TEXT, position TEXT);
+INSERT INTO itemNotes VALUES (13,1,'<p>A child <strong>note</strong>.</p>','A child note');
+INSERT INTO itemAnnotations VALUES (14,10,'Highlighted text','My comment','#ffd400','iv','{"pageIndex":3}');
