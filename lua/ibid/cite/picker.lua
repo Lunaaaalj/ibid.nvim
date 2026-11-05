@@ -11,6 +11,27 @@ local function label(it)
 end
 
 local function fallback(items, opts)
+  if opts.preselected and #opts.preselected > 0 then
+    local selected = {}
+    for _, key in ipairs(opts.preselected) do selected[key] = true end
+    local done = { done = true }
+    local choices = { done }
+    for _, item in ipairs(items) do choices[#choices + 1] = item end
+    local function show()
+      vim.ui.select(choices, { prompt = opts.prompt .. " (toggle items, then Done)", format_item = function(it)
+        if it.done then return "Done — confirm selected citations" end
+        return (selected[it.key] and "[x] " or "[ ] ") .. label(it)
+      end }, function(it)
+        if not it then return end
+        if it.done then
+          local result = {}
+          for _, item in ipairs(items) do if selected[item.key] then result[#result + 1] = item end end
+          if #result > 0 then opts.on_select(result) end
+        else selected[it.key] = not selected[it.key]; show() end
+      end)
+    end
+    return show()
+  end
   vim.ui.select(items, { prompt = opts.prompt, format_item = label }, function(it)
     if it then opts.on_select({ it }) end
   end)
@@ -50,7 +71,8 @@ local function telescope(items, opts)
     return out
   end
 
-  pickers.new({}, {
+  local picker
+  picker = pickers.new({}, {
     prompt_title = opts.prompt,
     finder = finders.new_table({
       results = items,
@@ -70,7 +92,33 @@ local function telescope(items, opts)
       end,
     }),
     attach_mappings = function(bufnr, map)
+      if opts.cite_ft and require("ibid.cite.scan").syntax(opts.cite_ft) == "tex" then
+        local key = (config.options.citation or {}).command_key
+        if key == nil then key = "<C-t>" end
+        if key then map({ "i", "n" }, key, function()
+          local command = require("ibid.cite.insert").cycle_command(opts.cite_ft)
+          vim.notify("ibid: citation command " .. (command or "custom"))
+        end, { desc = "ibid: cycle citation command" }) end
+      end
+      if opts.preselected and #opts.preselected > 0 then
+        local wanted, applied = {}, false
+        opts._preselection_ready = false
+        for _, key in ipairs(opts.preselected) do wanted[key] = true end
+        state.get_current_picker(bufnr):register_completion_callback(function(current)
+          if applied then return end
+          applied = true
+          local count = 0
+          for index = 1, current.manager:num_results() do
+            local e = current.manager:get_entry(index)
+            if e and wanted[e.value.key] then current:add_selection(current:get_row(index)); count = count + 1 end
+          end
+          opts._preselection_ready = count == #opts.preselected
+        end)
+      end
       actions.select_default:replace(function()
+        if opts._preselection_ready == false then
+          return vim.notify("ibid: not all original citation keys are visible; replacement cancelled", vim.log.levels.WARN)
+        end
         local its = selected(bufnr)
         actions.close(bufnr)
         if #its > 0 then opts.on_select(its) end
@@ -88,7 +136,8 @@ local function telescope(items, opts)
       end
       return true
     end,
-  }):find()
+  })
+  picker:find()
 end
 
 -- pick({ prompt, on_select = function(items) }) — items are normalised
@@ -98,6 +147,11 @@ function M.pick(opts)
   library.get(function(err, lib)
     if err then return vim.notify("ibid: " .. err, vim.log.levels.ERROR) end
     local items = vim.tbl_filter(function(it) return it.key ~= nil end, lib.items)
+    for _, key in ipairs(opts.preselected or {}) do
+      if not lib.by_key or not lib.by_key[key] then
+        return vim.notify("ibid: cannot replace citation containing missing Zotero key '" .. key .. "'", vim.log.levels.WARN)
+      end
+    end
     if #items == 0 then return vim.notify("ibid: the Zotero library is empty", vim.log.levels.WARN) end
     if pcall(require, "telescope") then telescope(items, opts) else fallback(items, opts) end
   end)

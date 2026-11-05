@@ -41,8 +41,13 @@ function source:complete(params, callback)
   library.get(function(err, lib)
     if err or not lib then return callback({ items = {}, isIncomplete = false }) end
     local items = {}
+    local before = params.context.cursor_before_line
+    local typed = before:match("@([%w_:%.%-]*)$") or before:match("[<{,]%s*([%w_:%.%-]*)$")
+    local limit = math.max(1, tonumber((config.options.citation or {}).completion_limit) or 50)
+    local truncated = false
     for _, it in ipairs(lib.items) do
       if it.key then
+        if typed == "" and #items >= limit then truncated = true; break end
         table.insert(items, {
           label = it.key,
           filterText = table.concat({ it.key, it.author_list, it.year, it.title }, " "),
@@ -52,7 +57,7 @@ function source:complete(params, callback)
         })
       end
     end
-    callback({ items = items, isIncomplete = false })
+    callback({ items = items, isIncomplete = truncated })
   end)
 end
 
